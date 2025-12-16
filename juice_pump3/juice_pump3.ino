@@ -25,7 +25,10 @@ const int PULSES_PER_STEP = 32;
 const int STEPS_PER_REV = 200;
 const int MAX_RPS = 8;
 const int MAX_PWM_FREQ_MOTOR = PULSES_PER_STEP * STEPS_PER_REV * MAX_RPS;
-const int JUICE_LEVEL_LOW_PIN = A2;   // Single lower sensor at ~50 mL level (LOW = water detected)
+// Juice level sensor input.
+// NOTE: GPIO4 is also the board's built-in I2C SCL pin (STEMMA QT header). If you use it for juice level,
+// you should not use the built-in I2C header at the same time.
+const int JUICE_LEVEL_LOW_PIN = 4;   // GPIO4 / SCL (LOW = water detected)
 
 float flow_rate;                  // This is the empirically determined flow rate given the target_rps, stored in flash
 float purge_vol;                  // Volume to purge when pressing the purge button, stored in flash
@@ -399,6 +402,12 @@ void check_serial_commands() {
       bool success = true;
       JsonObject setParams = doc["set"].as<JsonObject>();
 
+      // Reject ambiguous requests: don't allow both direct flow_rate and adjust_flow_rate in the same request.
+      if (setParams.containsKey("flow_rate") && setParams.containsKey("adjust_flow_rate")) {
+        success = false;
+        responseDoc["error"] = "Use either set.flow_rate or set.adjust_flow_rate (not both)";
+      }
+
       if (setParams.containsKey("flow_rate")) {
         float new_flow_rate = setParams["flow_rate"].as<float>();
         if (new_flow_rate > 0) {
@@ -408,6 +417,32 @@ void check_serial_commands() {
         } else {
           success = false;
           responseDoc["error"] = "Invalid flow_rate value";
+        }
+      }
+
+      // Adjust flow_rate based on an expected vs actual dispense measurement.
+      // Matches the scaling in `capactive_calibration.py`:
+      //   flow_rate_new = flow_rate_old * (actual_mls / expected_mls)
+      if (setParams.containsKey("adjust_flow_rate") && success) {
+        JsonObject adj = setParams["adjust_flow_rate"].as<JsonObject>();
+        float expected_mls = adj["expected_mls"].as<float>();
+        float actual_mls = adj["actual_mls"].as<float>();
+
+        if (expected_mls > 0 && actual_mls > 0) {
+          float flow_rate_old = flow_rate;
+          float scale_factor = actual_mls / expected_mls;
+          float flow_rate_new = flow_rate_old * scale_factor;
+
+          flow_rate = flow_rate_new;
+          preferences.putFloat("flow_rate", flow_rate);
+          sched_disp_update = true;
+
+          responseDoc["flow_rate_old"] = flow_rate_old;
+          responseDoc["flow_rate_new"] = flow_rate_new;
+          responseDoc["scale_factor"] = scale_factor;
+        } else {
+          success = false;
+          responseDoc["error"] = "Invalid adjust_flow_rate values (expected_mls and actual_mls must be > 0)";
         }
       }
       
@@ -631,8 +666,9 @@ void setup() {
   pinMode(DMODE2_PIN, OUTPUT);
   pinMode(STEP_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
-  // Setup juice level sensor pin (digital input)
-  pinMode(JUICE_LEVEL_LOW_PIN, INPUT);
+  // Setup juice level sensor pin (digital input).
+  // Use pull-up so the line is HIGH by default; the sensor should pull it LOW when liquid is detected.
+  pinMode(JUICE_LEVEL_LOW_PIN, INPUT_PULLUP);
   pinMode(SWITCH_D0_PIN, INPUT_PULLUP); // D0 is pulled HIGH by default
   pinMode(SWITCH_D1_PIN, INPUT_PULLDOWN);
   pinMode(SWITCH_D2_PIN, INPUT_PULLDOWN);
