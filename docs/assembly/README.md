@@ -1,6 +1,6 @@
 # Assembly guide (Juicer)
 
-<img src="images/assembled.png" alt="Assembled juicer" width="50%">
+<img src="images/assembled.png" alt="Assembled juicer" width="40%">
 
 This is a first-draft assembly flow based on the photo set. If anything in your kit differs (pump model, fittings, mounting hardware, board revision), we can tweak the steps.
 
@@ -15,7 +15,7 @@ This is a first-draft assembly flow based on the photo set. If anything in your 
 
 ## Step 2 — Choose a mounting option and mechanically install
 
-<img src="images/mounting_options.png" alt="Mounting options" width="50%">
+<img src="images/mounting_options.png" alt="Mounting options" width="40%">
 
 - **Pick an orientation**:
   - The bracket is designed with flexibility in mind, allowing mounting in several orientations.
