@@ -73,7 +73,9 @@ This is a first-draft assembly flow based on the photo set. If anything in your 
 
 ## Step 7 — Calibration
 - The unit comes calibrated as part of testing, but different lengths of tubing and juice tube configurations will alter that flow rate.
+- Tip: if you see **bubbles** coming from the end of the tube in the bottle while pumping, the pump direction is reversed. Flip direction with `{"set":{"direction":"left"}}` or `{"set":{"direction":"right"}}` (choose the direction that moves liquid from the bottle toward the subject).
 - The recommended method of calibration:
+  - Pour at least 200 mL of water or juice into the supplied Nalgene bottle.
   - Use the "Purge" button (middle button right of screen) to administer 100 mL of juice into a vessel.
   - Use a precise scale (tared for that vessel) to measure the weight in grams of fluid dispensed, which should be approximately equal to the mL dispensed.
   - Update the flow rate using:
