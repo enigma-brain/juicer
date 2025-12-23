@@ -92,12 +92,22 @@ Preferences preferences;
  * 1. Set Commands:
  *    - {"set": {"flow_rate": <float>}}
  *      - Sets the flow rate (must be > 0).
+ *    - {"set": {"adjust_flow_rate": {"expected_mls": <float>, "actual_mls": <float>}}}
+ *      - Adjusts the stored flow rate using a measured dispense:
+ *        - flow_rate_new = flow_rate_old * (actual_mls / expected_mls)
+ *        - Returns extra fields: flow_rate_old, flow_rate_new, scale_factor
+ *      - NOTE: You must use either set.flow_rate OR set.adjust_flow_rate (not both).
  *    - {"set": {"purge_vol": <float>}}
  *      - Sets the purge volume (must be > 0).
  *    - {"set": {"target_rps": <float>}} {"set": {"target_rps": 3}}
  *      - Sets the target revolutions per second (must be > 0 and <= MAX_RPS).
  *    - {"set": {"direction": "<left|right>"}}  {"set": {"direction": "right"}}
  *      - Persists the pump direction (default is "left", meaning pump from right to left) for all future pump actions.
+ *    - {"set": {"reward_overlap_policy": "<replace|append|reject>"}}
+ *      - Controls what happens if a reward arrives while a serial reward is already running:
+ *        - replace: preempt current and start requested (default)
+ *        - append: extend current reward by requested amount
+ *        - reject: ignore new reward while reward is running
  *
  * 2. Do Commands (only 1 allowed per request):
  *    - {"do": "abort"}
@@ -106,6 +116,8 @@ Preferences preferences;
  *      - Resets reward counters (number and mLs), same as pressing the reset hardware button.
  *    - {"do": {"reward": <float>}} {"do": {"reward": 0.8}}
  *      - Dispenses a reward of the specified amount (must be > 0).
+ *      - If pump is busy (purge/manual/calibration), reward is rejected.
+ *      - If a serial reward is running, behavior depends on reward_overlap_policy.
  *    - {"do": {"purge": <float>}}
  *      - Starts a purge operation for the specified amount (must be > 0).
  *    - {"do": {"calibration": {"n": <int>, "on": <int>, "off": <int>}}} {"do": {"calibration": {"n": 10, "on": 500, "off": 500}}}
@@ -127,6 +139,10 @@ Preferences preferences;
  *      - Retrieves the total number of rewards dispensed.
  *    - {"get": ["direction"]}
  *      - Retrieves the persisted pump direction ("left" or "right")
+ *    - {"get": ["reward_overlap_policy"]}
+ *      - Retrieves the reward overlap policy ("replace", "append", or "reject")
+ *    - {"get": ["pump_state"]}
+ *      - Retrieves a minimal pump state string: "idle", "purge", "manual", "serial_reward", or "calibration"
  *    - {"get": ["juice_level"]}
  *      - Retrieves juice level status string: "level>250", "250>level>50", "level<50", or sensor error message
  *    - {"get": ["<unknown_parameter>"]}
@@ -183,6 +199,16 @@ String reward_overlap_policy_to_string(RewardOverlapPolicy p) {
   if (p == ROP_APPEND) return "append";
   if (p == ROP_REJECT) return "reject";
   return "replace";
+}
+
+// A minimal, single-string representation of what the pump is currently doing.
+// Intended for the API `get: ["pump_state"]`.
+String pump_state_to_string() {
+  if (purging) return "purge";
+  if (serial_watering) return "serial_reward";
+  if (manual_watering) return "manual";
+  if (calibration_in_progress) return "calibration";
+  return "idle";
 }
 
 bool parse_reward_overlap_policy(const String& s, RewardOverlapPolicy& out) {
@@ -694,6 +720,7 @@ void check_serial_commands() {
         else if (param == "reward_number") responseDoc["reward_number"] = reward_number;
         else if (param == "direction") responseDoc["direction"] = direction_to_string(current_direction);
         else if (param == "reward_overlap_policy") responseDoc["reward_overlap_policy"] = reward_overlap_policy_to_string(reward_overlap_policy);
+        else if (param == "pump_state") responseDoc["pump_state"] = pump_state_to_string();
         else if (param == "juice_level") responseDoc["juice_level"] = juice_level;
         else responseDoc[param] = "Unknown parameter";
       }
