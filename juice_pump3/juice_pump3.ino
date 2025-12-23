@@ -9,17 +9,6 @@
 #include <ArduinoJson.h>          // 7.2.0 by Benoit Blanchon
 
 
-
-
-// speedup recs:
-// set baud to 2000000 x
-// use Serial.flush(); after each write x
-// Serial.setTxBufferSize(128); x
-// Serial.setRxBufferSize(128);  x
-// connect to usb 3.0
-// sudo setserial /dev/ttyACM0 low_latency
-
-
 // Define constants
 const int PULSES_PER_STEP = 32;
 const int STEPS_PER_REV = 200;
@@ -161,19 +150,6 @@ Preferences preferences;
 
 
 // Pin definitions for motor and switches
-
-// old
-// #define REMOTE_TOGGLE_PIN 13
-// #define DMODE0_PIN 12
-// #define DMODE1_PIN 11
-// #define DMODE2_PIN 10
-// #define DIR_PIN 9
-// #define STEP_PIN 6
-// #define EN_PIN 5
-
-// new
-// #define REMOTE_TOGGLE_PIN 13  // Replaced with juice level detection
-
 #define DMODE0_PIN 5
 #define DMODE1_PIN 6
 #define DMODE2_PIN 9
