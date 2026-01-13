@@ -771,8 +771,9 @@ void setup() {
   pinMode(STEP_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
   // Setup juice level sensor pin (digital input).
-  // Use pull-up so the line is HIGH by default; the sensor should pull it LOW when liquid is detected.
-  pinMode(JUICE_LEVEL_LOW_PIN, INPUT_PULLUP);
+  // No internal pull-up (some sensors can't sink enough current, resulting in ~2-3V "low").
+  // If the line floats, add an external pull-up/down appropriate for your sensor output type.
+  pinMode(JUICE_LEVEL_LOW_PIN, INPUT);
   pinMode(SWITCH_D0_PIN, INPUT_PULLUP); // D0 is pulled HIGH by default
   pinMode(SWITCH_D1_PIN, INPUT_PULLDOWN);
   pinMode(SWITCH_D2_PIN, INPUT_PULLDOWN);
