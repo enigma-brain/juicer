@@ -42,6 +42,7 @@ bool pump_running = false;        // Keeps track of if pump is running
 uint32_t pump_stop_time = 0;      // What time to stop the pump
 bool sched_disp_update = false;   // For when you want to update the display but not quite yet
 bool serialConnected = false;
+bool notify_reward_complete_pending = false;
 
 // What to do if a serial reward arrives while a serial reward is already in progress.
 // - replace: stop/shorten current reward and start requested
@@ -361,6 +362,10 @@ void check_for_pump_stop() {
     // reward_number++;
     serial_watering = false;
     stop_pump();
+    if (notify_reward_complete_pending) {
+      Serial.println("{\"notify\":\"reward_complete\"}");
+      notify_reward_complete_pending = false;
+    }
     update_display(); // Reset highlight
   }
 
@@ -441,6 +446,33 @@ void check_serial_commands() {
       } else if (!doc["do"].is<const char*>()) {
         responseDoc["status"] = "failure";
         responseDoc["error"] = "Invalid 'do' command format";
+        String response;
+        serializeJson(responseDoc, response);
+        Serial.println(response);
+        return;
+      }
+    }
+
+    bool get_notify_requested = false;
+    if (doc.containsKey("get")) {
+      JsonArray getArray = doc["get"].as<JsonArray>();
+      for (JsonVariant value : getArray) {
+        if (value.as<String>() == "notify") {
+          get_notify_requested = true;
+          break;
+        }
+      }
+    }
+
+    if (get_notify_requested) {
+      bool reward_in_do = false;
+      if (doc.containsKey("do") && doc["do"].is<JsonObject>()) {
+        JsonObject doParams = doc["do"].as<JsonObject>();
+        reward_in_do = doParams.containsKey("reward");
+      }
+      if (!reward_in_do) {
+        responseDoc["status"] = "failure";
+        responseDoc["error"] = "get.notify is only valid when paired with do.reward in the same request";
         String response;
         serializeJson(responseDoc, response);
         Serial.println(response);
@@ -588,6 +620,7 @@ void check_serial_commands() {
             serial_watering = false;
             calibration_in_progress = false;
           }
+          notify_reward_complete_pending = false;
           sched_disp_update = true;
         } else if (action == "reset") {
           reset_counters(false);
@@ -637,6 +670,9 @@ void check_serial_commands() {
             } else {
               // Normal, idle case
               start_serial_reward(reward_value, pixels.Color(255, 255, 255));
+            }
+            if (success && get_notify_requested) {
+              notify_reward_complete_pending = true;
             }
           } else {
             success = false;
@@ -698,6 +734,7 @@ void check_serial_commands() {
         else if (param == "reward_overlap_policy") responseDoc["reward_overlap_policy"] = reward_overlap_policy_to_string(reward_overlap_policy);
         else if (param == "pump_state") responseDoc["pump_state"] = pump_state_to_string();
         else if (param == "juice_level") responseDoc["juice_level"] = juice_level;
+        else if (param == "notify") { /* handled asynchronously */ }
         else responseDoc[param] = "Unknown parameter";
       }
     }
