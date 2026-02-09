@@ -8,6 +8,8 @@ Key features:
 - Port auto-discovery (Windows/Linux) with explicit override
 - Context-manager friendly
 - By default, raises an exception when the device replies with status != "success"
+- Reward notifications: request `notify` with `reward` to receive a follow-up JSON line
+  (`reward_with_notify(...)` or `read(timeout_s)` after `reward(..., "notify")`)
 
 Example:
 
@@ -182,13 +184,14 @@ class Juicer:
         Read until a newline, returning the first parseable JSON object found.
         Ignores non-JSON lines (e.g. boot noise) until the deadline.
         """
-        buf = b""
-        while time.time() < deadline_s:
-            chunk = self._ser.read(self._ser.in_waiting or 1)
-            if chunk:
-                buf += chunk
-            while b"\n" in buf:
-                line, buf = buf.split(b"\n", 1)
+        original_timeout = self._ser.timeout
+        try:
+            while time.time() < deadline_s:
+                remaining = max(0.0, deadline_s - time.time())
+                self._ser.timeout = remaining
+                line = self._ser.readline()
+                if not line:
+                    continue
                 line_s = line.decode(errors="replace").strip()
                 if not line_s:
                     continue
@@ -200,9 +203,18 @@ class Juicer:
                     continue
                 if isinstance(obj, dict):
                     return obj
-            time.sleep(0.01)
+        finally:
+            self._ser.timeout = original_timeout
 
         raise ProtocolError("Timed out waiting for a JSON response line from device")
+
+    def read(self, timeout_s: float | None = None) -> dict[str, Any]:
+        """
+        Read the next JSON response line within the timeout.
+        """
+        if timeout_s is None:
+            timeout_s = self.timeout_s
+        return self._readline_json(time.time() + float(timeout_s))
 
     def request(
         self,
@@ -265,6 +277,27 @@ class Juicer:
         """
         return self.do({"reward": float(mls)}, get=get_keys or None, timeout_s=timeout_s)
 
+    def reward_with_notify(
+        self,
+        mls: float,
+        *get_keys: str,
+        timeout_s: float | None = None,
+        notify_timeout_s: float | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """
+        Dispense `mls` and wait for the follow-up notify line.
+
+        Returns (response, notify_response). The notify response is typically:
+        {"notify": "reward_complete"}.
+        """
+        get_list = list(get_keys)
+        if "notify" not in get_list:
+            get_list.append("notify")
+        resp = self.do({"reward": float(mls)}, get=get_list, timeout_s=timeout_s)
+        deadline_s = time.time() + float(notify_timeout_s or timeout_s or self.timeout_s)
+        notify = self._readline_json(deadline_s)
+        return resp, notify
+
     def purge(self, mls: float, *get_keys: str, timeout_s: float | None = None) -> dict[str, Any]:
         return self.do({"purge": float(mls)}, get=get_keys or None, timeout_s=timeout_s)
 
@@ -279,5 +312,4 @@ class Juicer:
             {"set": {"adjust_flow_rate": {"expected_mls": float(expected_mls), "actual_mls": float(actual_mls)}}},
             timeout_s=timeout_s,
         )
-
 
